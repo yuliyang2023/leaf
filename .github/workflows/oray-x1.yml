@@ -41,6 +41,14 @@ jobs:
           echo "AR_mipsel_unknown_linux_musl=$compiler-ar" >> "$GITHUB_ENV"
           echo "CFLAGS_mipsel_unknown_linux_musl=-Os -march=24kec -mabi=32 -msoft-float" >> "$GITHUB_ENV"
           echo "ORAY_READELF=$compiler-readelf" >> "$GITHUB_ENV"
+          # Rust musl asks for libunwind; GCC supplies the same _Unwind ABI
+          # in its static libgcc_eh. Use that real archive, not an empty stub.
+          unwind_archive=$("$compiler-gcc" -print-file-name=libgcc_eh.a)
+          test -f "$unwind_archive"
+          "$compiler-nm" "$unwind_archive" | grep '_Unwind_Resume' > "$RUNNER_TEMP/unwind-symbols.txt"
+          mkdir -p "$RUNNER_TEMP/oray-unwind"
+          ln -s "$unwind_archive" "$RUNNER_TEMP/oray-unwind/libunwind.a"
+          echo "ORAY_UNWIND_DIR=$RUNNER_TEMP/oray-unwind" >> "$GITHUB_ENV"
           curl -fL --retry 3 -o upx.tar.xz https://github.com/upx/upx/releases/download/v5.2.1/upx-5.2.1-amd64_linux.tar.xz
           echo "$UPX_SHA256  upx.tar.xz" | sha256sum -c
           tar -xJf upx.tar.xz -C "$RUNNER_TEMP"
@@ -52,6 +60,7 @@ jobs:
           CARGO_BUILD_JOBS: '4'
         run: |
           set -euo pipefail
+          export RUSTFLAGS="$RUSTFLAGS -L native=$ORAY_UNWIND_DIR"
           cargo build -Z build-std=std,panic_abort --profile oray --target "$TARGET" -p leaf-oray
           mkdir -p dist
           cp "target/$TARGET/oray/leaf-oray" dist/leaf-oray-vmess
