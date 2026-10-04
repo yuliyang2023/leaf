@@ -1,0 +1,102 @@
+name: Build Oray X1 VMess
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vmess:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      TARGET: mipsel-unknown-linux-musl
+      TOOLCHAIN: mipsel-unknown-linux-muslsf
+      TOOLCHAIN_SHA256: 93fcfc5e8d28096941df04c3c5bc56b653d8aa81f8634671f236e0f443a451b6
+      UPX_SHA256: 402162aad30af47e60dbd767fb2e64ca394ace9727ba1f40283641f1d1b91657
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install Rust nightly and standard library sources
+        run: |
+          rustup toolchain install nightly-2026-10-04 --profile minimal --component rust-src
+          rustup override set nightly-2026-10-04
+          rustc -Vv
+      - name: Install build and emulation tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential perl pkg-config libclang-dev qemu-user
+      - name: Install verified MIPS soft-float compiler and UPX
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o toolchain.tar.xz "https://github.com/cross-tools/musl-cross/releases/download/20261001/${TOOLCHAIN}.tar.xz"
+          echo "$TOOLCHAIN_SHA256  toolchain.tar.xz" | sha256sum -c
+          mkdir -p "$RUNNER_TEMP/x-tools"
+          tar -xJf toolchain.tar.xz -C "$RUNNER_TEMP/x-tools"
+          compiler="$RUNNER_TEMP/x-tools/$TOOLCHAIN/bin/$TOOLCHAIN"
+          echo "CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER=$compiler-gcc" >> "$GITHUB_ENV"
+          echo "CC_mipsel_unknown_linux_musl=$compiler-gcc" >> "$GITHUB_ENV"
+          echo "AR_mipsel_unknown_linux_musl=$compiler-ar" >> "$GITHUB_ENV"
+          echo "CFLAGS_mipsel_unknown_linux_musl=-Os -march=24kec -mabi=32 -msoft-float" >> "$GITHUB_ENV"
+          echo "ORAY_READELF=$compiler-readelf" >> "$GITHUB_ENV"
+          curl -fL --retry 3 -o upx.tar.xz https://github.com/upx/upx/releases/download/v5.2.1/upx-5.2.1-amd64_linux.tar.xz
+          echo "$UPX_SHA256  upx.tar.xz" | sha256sum -c
+          tar -xJf upx.tar.xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/upx-5.2.1-amd64_linux" >> "$GITHUB_PATH"
+      - name: Build only SOCKS5 inbound and VMess TCP outbound
+        env:
+          RUSTFLAGS: -C target-cpu=mips32r2 -C target-feature=+soft-float,+crt-static -C link-self-contained=no -C link-arg=-static -C link-arg=-Wl,--gc-sections
+          OPENSSL_STATIC: '1'
+          CARGO_BUILD_JOBS: '4'
+        run: |
+          set -euo pipefail
+          cargo build -Z build-std=std,panic_abort --profile oray --target "$TARGET" -p leaf-oray
+          mkdir -p dist
+          cp "target/$TARGET/oray/leaf-oray" dist/leaf-oray-vmess
+          cargo tree -p leaf-oray --edges features --target "$TARGET" > dist/FEATURES.txt
+          cp Cargo.lock dist/Cargo.lock
+          rustc -Vv > dist/BUILD-INFO.txt
+          git rev-parse HEAD >> dist/BUILD-INFO.txt
+      - name: Verify static ELF and emulated SOCKS5 startup
+        run: |
+          set -euo pipefail
+          file dist/leaf-oray-vmess | tee dist/ELF.txt
+          "$ORAY_READELF" -h -A dist/leaf-oray-vmess >> dist/ELF.txt
+          if "$ORAY_READELF" -l dist/leaf-oray-vmess | grep -q INTERP; then exit 1; fi
+          timeout 15 qemu-mipsel -cpu 24KEc dist/leaf-oray-vmess -V
+          python3 scripts/oray-smoke.py dist/leaf-oray-vmess
+      - name: Try directly executable UPX compression
+        run: |
+          set -euo pipefail
+          if upx --best --lzma -o dist/leaf-oray-vmess-upx dist/leaf-oray-vmess > dist/UPX.txt 2>&1; then
+            upx -t dist/leaf-oray-vmess-upx >> dist/UPX.txt
+            timeout 15 qemu-mipsel -cpu 24KEc dist/leaf-oray-vmess-upx -V
+            python3 scripts/oray-smoke.py dist/leaf-oray-vmess-upx
+          else
+            rm -f dist/leaf-oray-vmess-upx
+            echo 'UPX could not pack this ELF; the uncompressed binary remains available.' >> dist/UPX.txt
+          fi
+      - name: Package and report real sizes
+        run: |
+          set -euo pipefail
+          cp leaf-oray/leaf.example.json ORAY-X1.md LICENSE dist/
+          cd dist
+          gzip -9 -n -k leaf-oray-vmess
+          sha256sum leaf-oray-vmess leaf-oray-vmess.gz > SHA256SUMS
+          if test -f leaf-oray-vmess-upx; then sha256sum leaf-oray-vmess-upx >> SHA256SUMS; fi
+          printf '%s\n' '### Oray X1: SOCKS5 + VMess TCP' '| File | Bytes | MiB |' '|---|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
+          for binary in leaf-oray-vmess leaf-oray-vmess.gz leaf-oray-vmess-upx; do
+            if test -f "$binary"; then
+              size=$(stat -c %s "$binary")
+              awk -v file="$binary" -v bytes="$size" 'BEGIN {printf "| %s | %d | %.3f |\n", file, bytes, bytes/1048576}' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          echo 'Flash currently has about 932 KiB free: compare against the executable, not gzip.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: leaf-oray-x1-vmess
+          path: dist/
+          retention-days: 30
+          if-no-files-found: error

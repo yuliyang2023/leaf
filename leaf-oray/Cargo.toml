@@ -1,0 +1,8 @@
+[package]
+name = "leaf-oray"
+version = "0.14.2"
+edition = "2021"
+publish = false
+
+[dependencies]
+leaf = { path = "../leaf", default-features = false, features = ["config-json", "inbound-socks", "outbound-vmess", "openssl-aead", "ctrlc"] }

@@ -2,6 +2,7 @@
 members = [
     "leaf",
     "leaf-cli",
+    "leaf-oray",
     "leaf-ffi",
     "leaf-plugins/shadowsocks",
 ]
@@ -18,3 +19,11 @@ strip = "symbols"
 [profile.dev]
 opt-level = 0
 debug = true
+
+[profile.oray]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
