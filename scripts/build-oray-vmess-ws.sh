@@ -23,6 +23,8 @@ rustup override set "$RUST_VERSION"
 curl -fL --retry 3 -o "$BUILD_TEMP/toolchain.tar.xz" "https://github.com/cross-tools/musl-cross/releases/download/20261001/$TOOLCHAIN.tar.xz"
 echo "$TOOLCHAIN_SHA256  $BUILD_TEMP/toolchain.tar.xz" | sha256sum -c
 tar -xJf "$BUILD_TEMP/toolchain.tar.xz" -C "$BUILD_TEMP"
+# Release archives contain read-only directories; allow removing our temporary copy.
+chmod -R u+w "$BUILD_TEMP/$TOOLCHAIN"
 compiler="$BUILD_TEMP/$TOOLCHAIN/bin/$TOOLCHAIN"
 export CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER="$compiler-gcc"
 export CC_mipsel_unknown_linux_musl="$compiler-gcc"
