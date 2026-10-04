@@ -4,5 +4,8 @@ version = "0.14.2"
 edition = "2021"
 publish = false
 
+[features]
+websocket = ["leaf/outbound-ws", "leaf/outbound-chain"]
+
 [dependencies]
 leaf = { path = "../leaf", default-features = false, features = ["config-json", "inbound-socks", "outbound-vmess", "openssl-aead", "ctrlc"] }

@@ -1,0 +1,24 @@
+name: Build Oray X1 VMess WebSocket UPX
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vmess-websocket:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build static MIPS soft-float VMess WebSocket and verify UPX
+        run: bash scripts/build-oray-vmess-ws.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: leaf-oray-x1-vmess-ws
+          path: dist/
+          retention-days: 30
+          if-no-files-found: error

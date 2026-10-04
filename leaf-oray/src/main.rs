@@ -1,6 +1,11 @@
 use std::{env, process};
 
 fn main() {
+    let transport = if cfg!(feature = "websocket") {
+        "VMess TCP + WebSocket"
+    } else {
+        "VMess TCP"
+    };
     let mut args = env::args().skip(1);
     let mut config = String::from("leaf.json");
     let mut test = false;
@@ -14,11 +19,11 @@ fn main() {
             }
             "-T" | "--test" => test = true,
             "-V" | "--version" => {
-                println!("leaf-oray {} (SOCKS5 + VMess TCP)", env!("CARGO_PKG_VERSION"));
+                println!("leaf-oray {} (SOCKS5 + {transport})", env!("CARGO_PKG_VERSION"));
                 return;
             }
             "-h" | "--help" => {
-                println!("leaf-oray [-c CONFIG.json] [-T] [-V]\nSOCKS5 inbound + VMess TCP outbound; single-threaded runtime.");
+                println!("leaf-oray [-c CONFIG.json] [-T] [-V]\nSOCKS5 inbound + {transport} outbound; single-threaded runtime.");
                 return;
             }
             _ => {
