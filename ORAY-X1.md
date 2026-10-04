@@ -12,6 +12,8 @@ VMess 是 AEAD TCP 模式，支持 `aes-128-gcm` 和 `chacha20-ietf-poly1305`。
 
 使用单线程 Tokio 运行时，优化配置为 `opt-level=z`、fat LTO、单代码生成单元、
 panic abort 和符号剥离。OpenSSL 和 musl 静态链接，不依赖 Oray 上的动态库。
+32 位 MIPS 缺少原生 64 位原子操作，流量统计使用 `portable-atomic` 的兼容实现；
+原生支持 64 位原子操作的平台继续使用标准库类型。
 
 ## 产物与空间
 
