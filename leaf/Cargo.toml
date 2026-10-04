@@ -153,7 +153,8 @@ ctrlc = ["tokio/signal"]
 [dependencies]
 # Common
 tokio = { version = "1", features = ["sync", "io-util", "net", "time", "rt", "rt-multi-thread"] }
-protobuf = "3.6"
+# Checked-in generated messages require exactly this protobuf runtime.
+protobuf = "=3.6.0"
 thiserror = "1.0"
 futures = "0.3"
 async-trait = "0.1"
